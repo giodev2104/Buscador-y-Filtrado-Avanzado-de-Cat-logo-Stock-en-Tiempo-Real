@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock en tiempo real · Autos Ribera</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+tailwind.config = {
+  theme: { extend: {
+    fontFamily: { display: ['"Bricolage Grotesque"', 'system-ui', 'sans-serif'], sans: ['"Instrument Sans"', 'system-ui', 'sans-serif'] },
+    colors: { ink: '#14232B', stone: '#ECF0EE', petrol: '#0F5C5A', petrolDark: '#0A4442', signal: '#F2B705' }
+  } }
+}
+</script>
+<style>
+  body { background: #ECF0EE; color: #14232B; }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 4px; background: transparent; position: absolute; pointer-events: none; top: 50%; transform: translateY(-50%); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; pointer-events: auto; width: 20px; height: 20px; border-radius: 50%; background: #fff; border: 3px solid #0F5C5A; cursor: grab; }
+  input[type=range]::-moz-range-thumb { pointer-events: auto; width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 3px solid #0F5C5A; cursor: grab; }
+  input[type=range]:focus-visible::-webkit-slider-thumb { outline: 3px solid #F2B705; }
+  .card-img { transition: transform .4s ease; }
+  .card:hover .card-img { transform: scale(1.04); }
+  dialog::backdrop { background: rgba(20,35,43,.6); }
+  @media (prefers-reduced-motion: reduce) { .card-img { transition: none; } .card:hover .card-img { transform: none; } }
+  body { background: radial-gradient(1200px 500px at 85% -5%, #d5e6e2 0%, transparent 60%), #ECF0EE; background-attachment: fixed; }
+  .enter { animation: rise .7s cubic-bezier(.2,.7,.2,1) both; animation-delay: calc(var(--i) * 70ms); }
+  @keyframes rise { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+  dialog[open] { animation: pop .25s ease-out; }
+  @keyframes pop { from { opacity: 0; transform: scale(.96) translateY(8px); } to { opacity: 1; transform: none; } }
+  #chips { scrollbar-width: none; } #chips::-webkit-scrollbar { display: none; }
+  @media (prefers-reduced-motion: reduce) { .enter, dialog[open] { animation: none; } }
+</style>
+</head>
+<body class="font-sans antialiased">
+
+<!-- Cabecera -->
+<header class="relative isolate overflow-hidden bg-ink text-white rounded-b-[2rem] sm:rounded-b-[3rem]">
+  <img src="https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1800&q=60" alt="" class="absolute inset-0 -z-20 w-full h-full object-cover" onerror="this.remove()">
+  <div class="absolute inset-0 -z-10 bg-gradient-to-r from-ink via-ink/85 to-ink/20"></div>
+  <div class="absolute inset-x-0 bottom-0 -z-10 h-32 bg-gradient-to-t from-ink/70 to-transparent"></div>
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 pt-6 pb-14 sm:pb-24">
+    <nav class="flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="grid place-items-center w-10 h-10 rounded-xl bg-signal text-ink font-display font-extrabold text-lg">AR</span>
+        <span class="font-display font-bold text-lg">Autos Ribera</span>
+      </div>
+      <span class="hidden sm:flex items-center gap-2 text-sm bg-white/10 backdrop-blur border border-white/15 rounded-full px-4 py-2"><span class="w-2 h-2 rounded-full bg-emerald-400"></span>Stock actualizado hoy</span>
+    </nav>
+    <div class="mt-14 sm:mt-24 max-w-2xl">
+      <h1 class="font-display font-extrabold text-4xl sm:text-6xl leading-[1.05] tracking-tight">Tu próximo coche, con stock real y precio claro.</h1>
+      <p class="mt-5 text-white/75 text-base sm:text-lg max-w-xl">Vehículos revisados y con garantía. Filtra por lo que necesitas y consúltanos por WhatsApp en un toque.</p>
+      <div id="stats" class="mt-8 flex flex-wrap gap-3"></div>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-4 sm:px-6 py-8 lg:py-10 lg:grid lg:grid-cols-[300px_1fr] lg:gap-8">
+
+  <!-- Filtros -->
+  <aside class="mb-6 lg:mb-0">
+    <details id="filtersBox" class="bg-white rounded-2xl shadow-[0_8px_30px_-12px_rgba(20,35,43,.2)] lg:sticky lg:top-4" open>
+      <summary class="lg:hidden cursor-pointer list-none px-4 py-3 font-semibold flex justify-between items-center">Filtros <span class="text-petrol text-sm" id="activeCount"></span></summary>
+      <form id="filters" class="p-4 space-y-5" onsubmit="return false" aria-label="Filtros del catálogo">
+        <div>
+          <label for="q" class="block text-sm font-semibold mb-1.5">Buscar</label>
+          <input id="q" type="search" placeholder="Marca, modelo o referencia" class="w-full rounded-lg border border-ink/20 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-petrol">
+        </div>
+        <div class="grid grid-cols-2 lg:grid-cols-1 gap-4">
+          <div>
+            <label for="cat" class="block text-sm font-semibold mb-1.5">Categoría</label>
+            <select id="cat" class="w-full rounded-lg border border-ink/20 px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-petrol"></select>
+          </div>
+          <div>
+            <label for="estado" class="block text-sm font-semibold mb-1.5">Estado</label>
+            <select id="estado" class="w-full rounded-lg border border-ink/20 px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-petrol"></select>
+          </div>
+        </div>
+        <div>
+          <div class="flex justify-between items-baseline mb-1.5">
+            <span class="text-sm font-semibold">Precio</span>
+            <span id="priceLabel" class="text-sm text-petrol font-semibold"></span>
+          </div>
+          <div class="relative h-8">
+            <div class="absolute top-1/2 -translate-y-1/2 h-1 w-full rounded bg-ink/15"></div>
+            <div id="track" class="absolute top-1/2 -translate-y-1/2 h-1 rounded bg-petrol"></div>
+            <input id="rMin" type="range" aria-label="Precio mínimo">
+            <input id="rMax" type="range" aria-label="Precio máximo">
+          </div>
+          <div class="grid grid-cols-2 gap-3 mt-2">
+            <input id="nMin" type="number" min="0" step="500" aria-label="Precio mínimo en euros" class="rounded-lg border border-ink/20 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-petrol">
+            <input id="nMax" type="number" min="0" step="500" aria-label="Precio máximo en euros" class="rounded-lg border border-ink/20 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-petrol">
+          </div>
+        </div>
+        <button id="clear" type="button" class="w-full rounded-lg border border-ink/20 py-2.5 text-sm font-semibold hover:bg-stone focus:outline-none focus-visible:ring-2 focus-visible:ring-petrol">Limpiar filtros</button>
+      </form>
+    </details>
+  </aside>
+
+  <!-- Resultados -->
+  <section aria-live="polite">
+    <div id="chips" class="flex gap-2 overflow-x-auto pb-3 mb-3 -mx-4 px-4 sm:mx-0 sm:px-0" role="group" aria-label="Categorías"></div>
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <p id="count" class="font-display font-bold text-xl"></p>
+      <label class="text-sm flex items-center gap-2">Ordenar
+        <select id="sort" class="rounded-lg border border-ink/20 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-petrol">
+          <option value="rel">Destacados</option>
+          <option value="asc">Precio: menor a mayor</option>
+          <option value="desc">Precio: mayor a menor</option>
+        </select>
+      </label>
+    </div>
+    <div id="grid" class="grid sm:grid-cols-2 xl:grid-cols-3 gap-5"></div>
+    <div id="empty" class="hidden text-center py-16 bg-white rounded-xl border border-dashed border-ink/20">
+      <p class="font-display font-bold text-xl">Ningún vehículo coincide</p>
+      <p class="text-ink/70 mt-1 mb-4">Amplía el rango de precio o quita algún filtro.</p>
+      <button id="clear2" class="rounded-lg bg-petrol text-white px-5 py-2.5 font-semibold hover:bg-petrolDark">Limpiar filtros</button>
+    </div>
+  </section>
+</main>
+<footer class="max-w-7xl mx-auto px-4 sm:px-6 py-10 text-sm text-ink/60 flex flex-wrap justify-between gap-2">
+  <span>© Autos Ribera · Precios con IVA incluido salvo indicación.</span><span>Los datos de stock se actualizan a diario.</span>
+</footer>
+
+<!-- Modal de detalle -->
+<dialog id="modal" class="w-[min(720px,94vw)] max-h-[92vh] rounded-3xl shadow-2xl p-0 overflow-hidden backdrop:bg-ink/60">
+  <div id="modalBody" class="overflow-y-auto max-h-[92vh]"></div>
+</dialog>
+
+<script>
+/* ============ CONFIGURACIÓN ============ */
+const WHATSAPP_NUMBER = '34600000000'; // Prefijo país + número, sin "+" ni espacios
+const BUSINESS = 'Autos Ribera';
+
+/* ============ DATOS DE EJEMPLO ============ */
+const U = id => `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=900&q=70`;
+const PRODUCTS = [
+  { id: 1, ref: 'AR-1042', title: 'BMW Serie 3 320d Touring', cat: 'Turismo', estado: 'Usado', price: 24900, stock: true, badge: '190 CV · Diésel', tags: ['Automático', 'Garantía 12 m'], img: U('1555215695-3004980ad54e'),
+    desc: 'Familiar premium muy cuidado, un único propietario y mantenimiento oficial completo.', specs: { 'Año': 2020, 'Kilómetros': '68.400 km', 'Combustible': 'Diésel', 'Cambio': 'Automático', 'Potencia': '190 CV', 'Etiqueta DGT': 'B' } },
+  { id: 2, ref: 'AR-1055', title: 'Audi Q3 35 TFSI S line', cat: 'SUV', estado: 'Usado', price: 28700, stock: true, badge: '150 CV · Gasolina', tags: ['Techo panorámico', 'Cámara 360º'], img: U('1568605117036-5fe5e7bab0b7'),
+    desc: 'SUV compacto con equipamiento completo, faros matriciales y asientos deportivos.', specs: { 'Año': 2021, 'Kilómetros': '41.200 km', 'Combustible': 'Gasolina', 'Cambio': 'S tronic', 'Potencia': '150 CV', 'Etiqueta DGT': 'C' } },
+  { id: 3, ref: 'AR-1067', title: 'Toyota Yaris Hybrid Active', cat: 'Turismo', estado: 'Reacondicionado', price: 15400, stock: true, badge: '116 CV · Híbrido', tags: ['Etiqueta ECO', 'Bajo consumo'], img: U('1519641471654-76ce0107ad1b'),
+    desc: 'Urbano híbrido revisado en taller propio: frenos, neumáticos y batería certificada.', specs: { 'Año': 2021, 'Kilómetros': '37.900 km', 'Combustible': 'Híbrido', 'Cambio': 'e-CVT', 'Potencia': '116 CV', 'Etiqueta DGT': 'ECO' } },
+  { id: 4, ref: 'AR-1071', title: 'Tesla Model 3 Long Range', cat: 'Eléctrico', estado: 'Usado', price: 36900, stock: false, badge: '560 km autonomía', tags: ['Tracción total', 'Autopilot'], img: U('1533473359331-0135ef1b58bf'),
+    desc: 'Eléctrico de largo alcance con batería al 94 % de salud. Disponible bajo pedido en 7–10 días.', specs: { 'Año': 2022, 'Kilómetros': '29.800 km', 'Combustible': 'Eléctrico', 'Cambio': 'Automático', 'Potencia': '440 CV', 'Etiqueta DGT': '0 emisiones' } },
+  { id: 5, ref: 'AR-1088', title: 'Ford Transit Custom L2H1', cat: 'Furgoneta', estado: 'Usado', price: 18900, stock: true, badge: '130 CV · 1.000 kg', tags: ['IVA deducible', 'Sin pasajeros'], img: U('1549399542-7e3f8b79c341'),
+    desc: 'Furgoneta de trabajo con mampara, suelo de madera y estanterías interiores.', specs: { 'Año': 2019, 'Kilómetros': '112.000 km', 'Combustible': 'Diésel', 'Cambio': 'Manual', 'Potencia': '130 CV', 'Carga útil': '1.000 kg' } },
+  { id: 6, ref: 'AR-1093', title: 'Porsche 911 Carrera 4S', cat: 'Deportivo', estado: 'Usado', price: 118500, stock: false, badge: '450 CV · Gasolina', tags: ['Sport Chrono', 'Libro de revisiones'], img: U('1503376780353-7e6692767b70'),
+    desc: 'Ejemplar de colección con paquete Sport Chrono y escape deportivo. Visita con cita previa.', specs: { 'Año': 2019, 'Kilómetros': '24.300 km', 'Combustible': 'Gasolina', 'Cambio': 'PDK', 'Potencia': '450 CV', 'Etiqueta DGT': 'C' } },
+  { id: 7, ref: 'AR-1104', title: 'Dacia Sandero Stepway Eco-G', cat: 'Turismo', estado: 'Nuevo', price: 14200, stock: true, badge: '100 CV · GLP', tags: ['0 km', 'Entrega inmediata'], img: U('1494976388531-d1058494cdd8'),
+    desc: 'Unidad de stock sin matricular, bifuel gasolina/GLP con garantía oficial de 3 años.', specs: { 'Año': 2026, 'Kilómetros': '0 km', 'Combustible': 'GLP', 'Cambio': 'Manual', 'Potencia': '100 CV', 'Etiqueta DGT': 'ECO' } },
+  { id: 8, ref: 'AR-1116', title: 'Kia Sportage 1.6 T-GDi HEV', cat: 'SUV', estado: 'Reacondicionado', price: 26300, stock: true, badge: '230 CV · Híbrido', tags: ['ADAS completo', 'Garantía 24 m'], img: U('1552519507-da3b142c6e3d'),
+    desc: 'SUV híbrido con revisión de 80 puntos y garantía ampliada a 24 meses.', specs: { 'Año': 2022, 'Kilómetros': '45.600 km', 'Combustible': 'Híbrido', 'Cambio': 'Automático', 'Potencia': '230 CV', 'Etiqueta DGT': 'ECO' } },
+  { id: 9, ref: 'AR-1121', title: 'Triumph Street Triple 765 RS', cat: 'Moto', estado: 'Usado', price: 9800, stock: true, badge: '123 CV · 765 cc', tags: ['A2 limitable', 'Quickshifter'], img: U('1558981806-ec527fa84c39'),
+    desc: 'Naked deportiva con suspensiones Öhlins y escape Arrow instalado.', specs: { 'Año': 2021, 'Kilómetros': '12.700 km', 'Combustible': 'Gasolina', 'Cambio': 'Manual 6v', 'Potencia': '123 CV', 'Carnet': 'A / A2 limitable' } },
+  { id: 10, ref: 'AR-1139', title: 'Renault Clio 1.0 TCe Evolution', cat: 'Turismo', estado: 'Usado', price: 8900, stock: true, badge: '90 CV · Gasolina', tags: ['Primer coche', 'ITV recién pasada'], img: U('1583121274602-3e2820c69888'),
+    desc: 'Utilitario económico y fiable. Ideal como primer coche, con ITV pasada y neumáticos nuevos.', specs: { 'Año': 2019, 'Kilómetros': '72.300 km', 'Combustible': 'Gasolina', 'Cambio': 'Manual', 'Potencia': '90 CV', 'Etiqueta DGT': 'C' } },
+];
+
+/* ============ UTILIDADES ============ */
+const $ = id => document.getElementById(id);
+const eur = n => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const norm = s => String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const estadoStyle = { 'Nuevo': 'bg-petrol text-white', 'Usado': 'bg-white text-ink', 'Reacondicionado': 'bg-signal text-ink' };
+const FALLBACK = "data:image/svg+xml;utf8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 260"><rect width="400" height="260" fill="#cfd8d5"/><path d="M90 160l22-46h176l22 46v36h-30v-14H120v14H90z" fill="#9fb0ab"/><circle cx="130" cy="160" r="14" fill="#14232B"/><circle cx="270" cy="160" r="14" fill="#14232B"/></svg>');
+
+const MIN_P = Math.floor(Math.min(...PRODUCTS.map(p => p.price)) / 500) * 500;
+const MAX_P = Math.ceil(Math.max(...PRODUCTS.map(p => p.price)) / 500) * 500;
+
+/* ============ ESTADO Y FILTROS ============ */
+const state = { q: '', cat: '', estado: '', min: MIN_P, max: MAX_P, sort: 'rel' };
+
+function fillSelect(el, label, values) {
+  el.innerHTML = `<option value="">${label}</option>` + values.map(v => `<option>${esc(v)}</option>`).join('');
+}
+fillSelect($('cat'), 'Todas las categorías', [...new Set(PRODUCTS.map(p => p.cat))].sort());
+fillSelect($('estado'), 'Cualquier estado', ['Nuevo', 'Usado', 'Reacondicionado']);
+[$('rMin'), $('rMax')].forEach(r => { r.min = MIN_P; r.max = MAX_P; r.step = 500; });
+[$('nMin'), $('nMax')].forEach(n => { n.min = MIN_P; n.max = MAX_P; });
+
+function syncPriceUI() {
+  $('rMin').value = $('nMin').value = state.min;
+  $('rMax').value = $('nMax').value = state.max;
+  const span = MAX_P - MIN_P;
+  $('track').style.left = ((state.min - MIN_P) / span * 100) + '%';
+  $('track').style.width = ((state.max - state.min) / span * 100) + '%';
+  $('priceLabel').textContent = `${eur(state.min)} – ${eur(state.max)}`;
+}
+
+function applyFilters() {
+  const terms = norm(state.q).split(/\s+/).filter(Boolean);
+  let list = PRODUCTS.filter(p => {
+    const hay = norm([p.title, p.ref, p.cat, p.badge, ...p.tags].join(' '));
+    return terms.every(t => hay.includes(t))
+      && (!state.cat || p.cat === state.cat)
+      && (!state.estado || p.estado === state.estado)
+      && p.price >= state.min && p.price <= state.max;
+  });
+  if (state.sort === 'asc') list.sort((a, b) => a.price - b.price);
+  if (state.sort === 'desc') list.sort((a, b) => b.price - a.price);
+  render(list);
+}
+
+function activeFilters() {
+  return [state.q, state.cat, state.estado, state.min !== MIN_P, state.max !== MAX_P].filter(Boolean).length;
+}
+
+/* ============ RENDER ============ */
+function render(list) {
+  $('count').textContent = list.length === 1 ? '1 vehículo' : `${list.length} vehículos`;
+  const n = activeFilters();
+  $('activeCount').textContent = n ? `${n} activo${n > 1 ? 's' : ''}` : '';
+  $('empty').classList.toggle('hidden', list.length > 0);
+  renderChips();
+  const first = !render.done; render.done = true;
+  $('grid').innerHTML = list.map((p, i) => `
+    <article class="card group bg-white rounded-2xl overflow-hidden flex flex-col shadow-[0_1px_2px_rgba(20,35,43,.06),0_10px_28px_-14px_rgba(20,35,43,.25)] hover:shadow-[0_2px_4px_rgba(20,35,43,.08),0_24px_44px_-18px_rgba(15,92,90,.45)] hover:-translate-y-1 transition duration-300 ${first ? 'enter' : ''}" style="--i:${i}">
+      <div class="relative aspect-[4/3] overflow-hidden bg-stone">
+        <img class="card-img w-full h-full object-cover" src="${p.img}" alt="${esc(p.title)}" loading="lazy" onerror="this.onerror=null;this.src=FALLBACK">
+        <div class="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-ink/70 to-transparent"></div>
+        <span class="absolute top-3 left-3 text-xs font-semibold px-3 py-1 rounded-full shadow-sm ${estadoStyle[p.estado]}">${p.estado}</span>
+        <span class="absolute top-3 right-3 text-xs font-semibold px-3 py-1 rounded-full bg-white/90 backdrop-blur flex items-center gap-1.5"><span class="w-2 h-2 rounded-full ${p.stock ? 'bg-emerald-500' : 'bg-signal'}"></span>${p.stock ? 'En stock' : 'Bajo pedido'}</span>
+        <span class="absolute bottom-3 left-3 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white/15 backdrop-blur-md border border-white/25 text-white">${esc(p.badge)}</span>
+      </div>
+      <div class="p-5 flex flex-col flex-1">
+        <p class="text-xs text-ink/55">${esc(p.cat)} · Ref. ${esc(p.ref)}</p>
+        <h2 class="font-display font-bold text-xl leading-snug mt-1">${esc(p.title)}</h2>
+        <div class="flex flex-wrap gap-1.5 mt-3">${p.tags.map(t => `<span class="text-xs bg-stone text-ink/80 rounded-full px-2.5 py-1">${esc(t)}</span>`).join('')}</div>
+        <div class="mt-auto pt-5 flex items-center justify-between gap-3 border-t border-ink/5">
+          <p class="font-display font-extrabold text-2xl text-petrol">${eur(p.price)}</p>
+          <button data-id="${p.id}" class="open rounded-full bg-petrol text-white text-sm font-semibold px-5 py-2.5 shadow-md shadow-petrol/25 hover:bg-petrolDark focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-petrol transition">Ver detalles</button>
+        </div>
+      </div>
+    </article>`).join('');
+}
+
+/* ============ MODAL + WHATSAPP ============ */
+let lastFocus = null;
+function waLink(p) {
+  const msg = `Hola ${BUSINESS}, me interesa el vehículo "${p.title}" (Ref. ${p.ref}, ${eur(p.price)}). ¿Sigue disponible?`;
+  return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`;
+}
+function openModal(id) {
+  const p = PRODUCTS.find(x => x.id === id);
+  lastFocus = document.activeElement;
+  $('modalBody').innerHTML = `
+    <div class="relative">
+      <img src="${p.img}" alt="${esc(p.title)}" class="w-full aspect-[16/9] sm:aspect-[2/1] object-cover" onerror="this.onerror=null;this.src=FALLBACK">
+      <div class="absolute inset-0 bg-gradient-to-t from-ink via-ink/30 to-transparent"></div>
+      <button id="closeModal" aria-label="Cerrar" class="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/90 backdrop-blur text-ink text-xl font-bold hover:bg-signal focus:outline-none focus-visible:ring-2 focus-visible:ring-petrol">×</button>
+      <span class="absolute top-4 left-4 text-xs font-semibold px-3 py-1 rounded-full ${estadoStyle[p.estado]}">${p.estado}</span>
+      <div class="absolute bottom-4 left-5 right-5 text-white">
+        <p class="text-xs text-white/70">${esc(p.cat)} · Ref. ${esc(p.ref)}</p>
+        <h2 class="font-display font-extrabold text-2xl sm:text-3xl leading-tight">${esc(p.title)}</h2>
+      </div>
+    </div>
+    <div class="p-5 sm:p-7">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <p class="font-display font-extrabold text-4xl text-petrol">${eur(p.price)}</p>
+        <p class="text-sm font-semibold flex items-center gap-2 rounded-full bg-stone px-4 py-2"><span class="w-2 h-2 rounded-full ${p.stock ? 'bg-emerald-500' : 'bg-signal'}"></span>${p.stock ? 'En stock · entrega inmediata' : 'Bajo pedido · consulta plazo'}</p>
+      </div>
+      <p class="mt-4 text-ink/80 max-w-prose">${esc(p.desc)}</p>
+      <dl class="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-5">
+        ${Object.entries(p.specs).map(([k, v]) => `<div class="rounded-xl bg-stone px-4 py-3"><dt class="text-xs text-ink/55">${esc(k)}</dt><dd class="font-semibold mt-0.5">${esc(v)}</dd></div>`).join('')}
+      </dl>
+      <div class="flex flex-wrap gap-1.5 mt-5">${p.tags.map(t => `<span class="text-xs border border-ink/15 rounded-full px-3 py-1">${esc(t)}</span>`).join('')}</div>
+      <a href="${waLink(p)}" target="_blank" rel="noopener" class="mt-6 flex items-center justify-center gap-2 rounded-2xl bg-[#1FA855] hover:bg-[#188a45] text-white font-semibold py-4 shadow-lg shadow-[#1FA855]/30 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#1FA855]">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 01-12.6 7.4L3 20.5l1.7-5.2A8.5 8.5 0 1121 11.5z"/></svg>
+        Consultar disponibilidad por WhatsApp
+      </a>
+    </div>`;
+  $('modal').showModal();
+  $('closeModal').focus();
+}
+
+function renderChips() {
+  const cats = ['', ...new Set(PRODUCTS.map(p => p.cat))];
+  $('chips').innerHTML = cats.map(c => {
+    const n = c ? PRODUCTS.filter(p => p.cat === c).length : PRODUCTS.length, on = state.cat === c;
+    return `<button data-cat="${esc(c)}" aria-pressed="${on}" class="shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-petrol ${on ? 'bg-petrol text-white shadow-md shadow-petrol/30' : 'bg-white text-ink shadow-sm hover:shadow-md'}">${c || 'Todos'} <span class="${on ? 'text-white/70' : 'text-ink/45'} font-medium">${n}</span></button>`;
+  }).join('');
+}
+$('chips').addEventListener('click', e => {
+  const b = e.target.closest('[data-cat]'); if (!b) return;
+  state.cat = b.dataset.cat; $('cat').value = state.cat; applyFilters();
+});
+$('stats').innerHTML = [
+  [PRODUCTS.length, 'vehículos'],
+  [PRODUCTS.filter(p => p.stock).length, 'en stock'],
+  [eur(MIN_P), 'precio desde']
+].map(([v, l]) => `<div class="bg-white/10 backdrop-blur-md border border-white/15 rounded-2xl px-5 py-3"><p class="font-display font-extrabold text-2xl">${v}</p><p class="text-xs text-white/70">${l}</p></div>`).join('');
+
+/* ============ EVENTOS ============ */
+$('q').addEventListener('input', e => { state.q = e.target.value; applyFilters(); });
+$('cat').addEventListener('change', e => { state.cat = e.target.value; applyFilters(); });
+$('estado').addEventListener('change', e => { state.estado = e.target.value; applyFilters(); });
+$('sort').addEventListener('change', e => { state.sort = e.target.value; applyFilters(); });
+
+function setPrice(min, max, changed) {
+  min = Math.max(MIN_P, Math.min(+min || MIN_P, MAX_P));
+  max = Math.max(MIN_P, Math.min(+max || MAX_P, MAX_P));
+  if (min > max) changed === 'min' ? (min = max) : (max = min);
+  state.min = min; state.max = max;
+  syncPriceUI(); applyFilters();
+}
+$('rMin').addEventListener('input', e => setPrice(e.target.value, state.max, 'min'));
+$('rMax').addEventListener('input', e => setPrice(state.min, e.target.value, 'max'));
+$('nMin').addEventListener('change', e => setPrice(e.target.value, state.max, 'min'));
+$('nMax').addEventListener('change', e => setPrice(state.min, e.target.value, 'max'));
+
+function clearAll() {
+  Object.assign(state, { q: '', cat: '', estado: '', min: MIN_P, max: MAX_P, sort: 'rel' });
+  $('q').value = ''; $('cat').value = ''; $('estado').value = ''; $('sort').value = 'rel';
+  syncPriceUI(); applyFilters();
+}
+$('clear').addEventListener('click', clearAll);
+$('clear2').addEventListener('click', clearAll);
+
+$('grid').addEventListener('click', e => { const b = e.target.closest('.open'); if (b) openModal(+b.dataset.id); });
+$('modal').addEventListener('click', e => { if (e.target === $('modal') || e.target.closest('#closeModal')) $('modal').close(); });
+$('modal').addEventListener('close', () => lastFocus && lastFocus.focus());
+
+// En escritorio los filtros siempre visibles; en móvil se pliegan
+const mq = matchMedia('(min-width: 1024px)');
+const syncDetails = () => { if (mq.matches) $('filtersBox').setAttribute('open', ''); else $('filtersBox').removeAttribute('open'); };
+mq.addEventListener('change', syncDetails); syncDetails();
+
+syncPriceUI();
+applyFilters();
+</script>
+</body>
+</html>
